@@ -1,0 +1,3 @@
+*.swp*
+
+cmd/cf-dns-cli/cf-dns-cli
