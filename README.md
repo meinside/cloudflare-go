@@ -20,6 +20,8 @@ func main() {
 }
 ```
 
+See more usages [here](https://github.com/meinside/cloudflare-go/tree/master/cmd/cf-dns-cli).
+
 ## Implementations
 
 - [X] List/create/update/delete DNS records
