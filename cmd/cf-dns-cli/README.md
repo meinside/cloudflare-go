@@ -72,7 +72,7 @@ Generate a sample DNS records file in JSON format. (file used with 'batch' comma
 
 ## examples of usage
 
-### update A record with external IP address (like DDNS)
+### update A record with public IP address (like DDNS)
 
 ```bash
 #!/usr/bin/env bash
@@ -80,7 +80,7 @@ Generate a sample DNS records file in JSON format. (file used with 'batch' comma
 # update_ddns.sh
 #
 # Update DNS records of Cloudflare
-# with external IP address (like DDNS updater)
+# with public IP address (like DDNS updater)
 #
 # created on: 2023.06.28.
 # updated on: 2023.06.29.
@@ -90,14 +90,14 @@ DNS_CLI_BIN="/path/to/cf-dns-cli"
 ZONE_ID="0123456789abcdef9876543210fedcba" # your zone id here
 RECORD_ID="abcdef0123456789fedcba9876543210" # your record id here
 
-# NOTE: external IP address can be obtained from various services
-EXTERNAL_IP=$(curl -s http://whatismyip.akamai.com)
+# NOTE: public IP address can be obtained from various services
+PUBLIC_IP=$(curl -s http://whatismyip.akamai.com)
 
 # ddns.example.com
 $DNS_CLI_BIN update $ZONE_ID $RECORD_ID \
     type=A \
     name=ddns.example.com \
-    content="$EXTERNAL_IP" \
+    content="$PUBLIC_IP" \
     comment="updated from '$(hostname)' with cf-dns-cli on $(date +%F)"
 
 ```
