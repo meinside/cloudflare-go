@@ -42,6 +42,10 @@ func readConfig() (conf config, err error) {
 	var bytes []byte
 	if bytes, err = os.ReadFile(configFilepath); err == nil {
 		if err = json.Unmarshal(bytes, &conf); err == nil {
+			if conf.APIKey == "" || conf.Email == "" {
+				return config{}, fmt.Errorf("missing properties `email` or `api_key` in: %s", configFilepath)
+			}
+
 			return conf, nil
 		}
 	}
