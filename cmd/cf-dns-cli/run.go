@@ -311,6 +311,17 @@ func updateDNSRecord(client *cfgo.CloudflareClient, zoneID, recordID string, par
 		"id": recordID,
 	}
 	for k, v := range params {
+		// FIXME: 'true' or 'false' need to be cast to bool type
+		if s, ok := v.(string); ok {
+			if s == "true" {
+				record[k] = true
+				continue
+			} else if s == "false" {
+				record[k] = false
+				continue
+			}
+		}
+
 		record[k] = v
 	}
 
