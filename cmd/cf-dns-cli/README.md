@@ -83,7 +83,7 @@ Generate a sample DNS records file in JSON format. (file used with 'batch' comma
 # with public IP address (like DDNS updater)
 #
 # created on: 2023.06.28.
-# updated on: 2023.06.29.
+# updated on: 2023.07.07.
 
 DNS_CLI_BIN="/path/to/cf-dns-cli"
 
@@ -98,6 +98,7 @@ $DNS_CLI_BIN update $ZONE_ID $RECORD_ID \
     type=A \
     name=ddns.example.com \
     content="$PUBLIC_IP" \
+    proxied=false
     comment="updated from '$(hostname)' with cf-dns-cli on $(date +%F)"
 
 ```
