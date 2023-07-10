@@ -441,8 +441,10 @@ func convertKeyValueParams(params []string) (result map[string]any) {
 
 			// FIXME: not all types are handled properly
 			if regexFloat.MatchString(v) { // float
-				result[k], _ = strconv.ParseFloat(v, 32)
-				continue
+				if f, err := strconv.ParseFloat(v, 32); err == nil {
+					result[k] = f
+					continue
+				}
 			} else if regexInt.MatchString(v) { // int
 				if i, err := strconv.ParseInt(v, 10, 32); err == nil {
 					result[k] = i
