@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	cfgo "github.com/meinside/cloudflare-go"
@@ -27,6 +28,10 @@ const (
 	cmdBatch    = "batch"
 	cmdDelete   = "delete"
 	cmdGenerate = "generate"
+
+	regexKeyValue = `(.*?)=['"]?(.*?)['"]?$`
+	regexFloat    = `[+-]?([0-9]*[.])?[0-9]+`
+	regexInt      = `[+-]?[0-9]+`
 )
 
 // config struct for configuration
@@ -311,17 +316,6 @@ func updateDNSRecord(client *cfgo.CloudflareClient, zoneID, recordID string, par
 		"id": recordID,
 	}
 	for k, v := range params {
-		// FIXME: 'true' or 'false' need to be cast to bool type
-		if s, ok := v.(string); ok {
-			if s == "true" {
-				record[k] = true
-				continue
-			} else if s == "false" {
-				record[k] = false
-				continue
-			}
-		}
-
 		record[k] = v
 	}
 
@@ -430,16 +424,40 @@ func filterParams(args []string) (filtered []string) {
 	return filtered
 }
 
-// convert an array of strings like "key1=value1" into a map
+// convert an array of strings like "key1=value1" into a map with desired value types
 func convertKeyValueParams(params []string) (result map[string]any) {
 	result = map[string]any{}
-	regex := regexp.MustCompile(`(.*?)=['"]?(.*?)['"]?$`)
+
+	regexKV := regexp.MustCompile(regexKeyValue)
+	regexFloat := regexp.MustCompile(regexFloat)
+	regexInt := regexp.MustCompile(regexInt)
 
 	for _, param := range params {
-		matches := regex.FindStringSubmatch(param)
+		matches := regexKV.FindStringSubmatch(param)
 
 		if len(matches) == 3 {
-			result[matches[1]] = matches[2]
+			k := matches[1]
+			v := matches[2]
+
+			// FIXME: not all types are handled properly
+			if regexFloat.MatchString(v) { // float
+				result[k], _ = strconv.ParseFloat(v, 32)
+				continue
+			} else if regexInt.MatchString(v) { // int
+				result[k], _ = strconv.ParseInt(v, 10, 32)
+				continue
+			} else if arr := strings.Split(v, ","); len(arr) > 1 { // []string
+				result[k] = arr
+				continue
+			} else if v == "true" { // bool (true)
+				result[k] = true
+				continue
+			} else if v == "false" { // bool (false)
+				result[k] = false
+				continue
+			}
+
+			result[k] = v
 		}
 	}
 
