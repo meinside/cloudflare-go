@@ -30,8 +30,8 @@ const (
 	cmdGenerate = "generate"
 
 	regexKeyValue = `(.*?)=['"]?(.*?)['"]?$`
-	regexFloat    = `[+-]?([0-9]*[.])?[0-9]+`
-	regexInt      = `[+-]?[0-9]+`
+	regexFloat    = `^[-+]?\d*[.]\d+$`
+	regexInt      = `^[+-]?\d+$`
 )
 
 // config struct for configuration
@@ -444,8 +444,10 @@ func convertKeyValueParams(params []string) (result map[string]any) {
 				result[k], _ = strconv.ParseFloat(v, 32)
 				continue
 			} else if regexInt.MatchString(v) { // int
-				result[k], _ = strconv.ParseInt(v, 10, 32)
-				continue
+				if i, err := strconv.ParseInt(v, 10, 32); err == nil {
+					result[k] = i
+					continue
+				}
 			} else if arr := strings.Split(v, ","); len(arr) > 1 { // []string
 				result[k] = arr
 				continue
