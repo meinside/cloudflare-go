@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	cfgo "github.com/meinside/cloudflare-go"
+	"github.com/meinside/infisical-go"
+	"github.com/meinside/infisical-go/helper"
 	"github.com/meinside/version-go"
 )
 
@@ -36,8 +38,19 @@ const (
 
 // config struct for configuration
 type config struct {
-	Email  string `json:"email"`
-	APIKey string `json:"api_key"`
+	// plain values
+	Email  string `json:"email,omitempty"`
+	APIKey string `json:"api_key,omitempty"`
+
+	// or Infisical settings
+	Infisical *struct {
+		WorkspaceID   string               `json:"workspace_id"`
+		Token         string               `json:"token"`
+		Environment   string               `json:"environment"`
+		SecretType    infisical.SecretType `json:"secret_type"`
+		EmailKeyPath  string               `json:"email_key_path"`
+		APIKeyKeyPath string               `json:"api_key_key_path"`
+	} `json:"infisical,omitempty"`
 }
 
 // read config file
@@ -47,8 +60,37 @@ func readConfig() (conf config, err error) {
 	var bytes []byte
 	if bytes, err = os.ReadFile(configFilepath); err == nil {
 		if err = json.Unmarshal(bytes, &conf); err == nil {
-			if conf.APIKey == "" || conf.Email == "" {
-				return config{}, fmt.Errorf("missing properties `email` or `api_key` in: %s", configFilepath)
+			if conf.Email == "" && conf.Infisical != nil {
+				// read email from infisical
+				var email string
+				email, err = helper.Value(
+					conf.Infisical.WorkspaceID,
+					conf.Infisical.Token,
+					conf.Infisical.Environment,
+					conf.Infisical.SecretType,
+					conf.Infisical.EmailKeyPath,
+				)
+				conf.Email = email
+
+				if err != nil {
+					return config{}, err
+				}
+			}
+			if conf.APIKey == "" && conf.Infisical != nil {
+				// read api key from infisical
+				var apiKey string
+				apiKey, err = helper.Value(
+					conf.Infisical.WorkspaceID,
+					conf.Infisical.Token,
+					conf.Infisical.Environment,
+					conf.Infisical.SecretType,
+					conf.Infisical.APIKeyKeyPath,
+				)
+				conf.APIKey = apiKey
+
+				if err != nil {
+					return config{}, err
+				}
 			}
 
 			return conf, nil
