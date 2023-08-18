@@ -19,6 +19,22 @@ Create a config file `$XDG_CONFIG_HOME/cf-dns-cli/config.json` with content:
 }
 ```
 
+You can also use [Infisical](https://infisical.com/) for retrieving your email and api key:
+
+```json
+{
+  "infisical": {
+    "workspace_id": "012345abcdefg",
+    "token": "st.xyzwabcd.0987654321.abcdefghijklmnop",
+    "environment": "dev",
+    "secret_type": "shared",
+    "email_key_path": "/path/to/your/KEY_TO_EMAIL",
+    "api_key_key_path": "/path/to/your/KEY_TO_API_KEY"
+  }
+}
+```
+
+
 ## usage
 
 See the following (not so helpful) message with `cf-dns-cli -h` or `cf-dns-cli --help`.
