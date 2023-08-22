@@ -44,12 +44,17 @@ type config struct {
 
 	// or Infisical settings
 	Infisical *struct {
-		WorkspaceID   string               `json:"workspace_id"`
-		Token         string               `json:"token"`
-		Environment   string               `json:"environment"`
-		SecretType    infisical.SecretType `json:"secret_type"`
-		EmailKeyPath  string               `json:"email_key_path"`
-		APIKeyKeyPath string               `json:"api_key_key_path"`
+		// NOTE: When the workspace's E2EE setting is enabled, APIKey is essential for decryption
+		E2EE   bool    `json:"e2ee,omitempty"`
+		APIKey *string `json:"api_key,omitempty"`
+
+		WorkspaceID string               `json:"workspace_id"`
+		Token       string               `json:"token"`
+		Environment string               `json:"environment"`
+		SecretType  infisical.SecretType `json:"secret_type"`
+
+		EmailKeyPath  string `json:"email_key_path"`
+		APIKeyKeyPath string `json:"api_key_key_path"`
 	} `json:"infisical,omitempty"`
 }
 
@@ -60,40 +65,40 @@ func readConfig() (conf config, err error) {
 	var bytes []byte
 	if bytes, err = os.ReadFile(configFilepath); err == nil {
 		if err = json.Unmarshal(bytes, &conf); err == nil {
-			if conf.Email == "" && conf.Infisical != nil {
-				// read email from infisical
-				var email string
-				email, err = helper.Value(
-					conf.Infisical.WorkspaceID,
-					conf.Infisical.Token,
-					conf.Infisical.Environment,
-					conf.Infisical.SecretType,
-					conf.Infisical.EmailKeyPath,
-				)
-				conf.Email = email
+			if conf.Email == "" && conf.APIKey == "" && conf.Infisical != nil {
+				// read email and api key from infisical
+				var email, apiKey string
+				var kvs map[string]string
+				var exists bool
 
-				if err != nil {
-					return config{}, err
+				if conf.Infisical.E2EE && conf.Infisical.APIKey != nil {
+					kvs, err = helper.E2EEValues(
+						*conf.Infisical.APIKey,
+						conf.Infisical.WorkspaceID,
+						conf.Infisical.Token,
+						conf.Infisical.Environment,
+						conf.Infisical.SecretType,
+						[]string{conf.Infisical.EmailKeyPath, conf.Infisical.APIKeyKeyPath},
+					)
+				} else {
+					kvs, err = helper.Values(
+						conf.Infisical.WorkspaceID,
+						conf.Infisical.Token,
+						conf.Infisical.Environment,
+						conf.Infisical.SecretType,
+						[]string{conf.Infisical.EmailKeyPath, conf.Infisical.APIKeyKeyPath},
+					)
+				}
+
+				if email, exists = kvs[conf.Infisical.EmailKeyPath]; exists {
+					conf.Email = email
+				}
+				if apiKey, exists = kvs[conf.Infisical.APIKeyKeyPath]; exists {
+					conf.APIKey = apiKey
 				}
 			}
-			if conf.APIKey == "" && conf.Infisical != nil {
-				// read api key from infisical
-				var apiKey string
-				apiKey, err = helper.Value(
-					conf.Infisical.WorkspaceID,
-					conf.Infisical.Token,
-					conf.Infisical.Environment,
-					conf.Infisical.SecretType,
-					conf.Infisical.APIKeyKeyPath,
-				)
-				conf.APIKey = apiKey
 
-				if err != nil {
-					return config{}, err
-				}
-			}
-
-			return conf, nil
+			return conf, err
 		}
 	}
 
