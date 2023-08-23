@@ -58,6 +58,48 @@ type config struct {
 	} `json:"infisical,omitempty"`
 }
 
+// get email and api key, retrieve them from infisical if needed
+func (c *config) GetEmailAndAPIKey() (email, apiKey string) {
+	if c.Email == "" && c.APIKey == "" && c.Infisical != nil {
+		// read email and api key from infisical
+		var kvs map[string]string
+		var exists bool
+
+		var err error
+		if c.Infisical.E2EE && c.Infisical.APIKey != nil {
+			kvs, err = helper.E2EEValues(
+				*c.Infisical.APIKey,
+				c.Infisical.WorkspaceID,
+				c.Infisical.Token,
+				c.Infisical.Environment,
+				c.Infisical.SecretType,
+				[]string{c.Infisical.EmailKeyPath, c.Infisical.APIKeyKeyPath},
+			)
+		} else {
+			kvs, err = helper.Values(
+				c.Infisical.WorkspaceID,
+				c.Infisical.Token,
+				c.Infisical.Environment,
+				c.Infisical.SecretType,
+				[]string{c.Infisical.EmailKeyPath, c.Infisical.APIKeyKeyPath},
+			)
+		}
+
+		if err != nil {
+			_stderr.Printf("failed to retrieve email and api key from infisical: %s", err)
+		}
+
+		if email, exists = kvs[c.Infisical.EmailKeyPath]; exists {
+			c.Email = email
+		}
+		if apiKey, exists = kvs[c.Infisical.APIKeyKeyPath]; exists {
+			c.APIKey = apiKey
+		}
+	}
+
+	return c.Email, c.APIKey
+}
+
 // read config file
 func readConfig() (conf config, err error) {
 	configFilepath := strings.Join([]string{getConfigDir(), configFilename}, string(filepath.Separator))
@@ -65,39 +107,6 @@ func readConfig() (conf config, err error) {
 	var bytes []byte
 	if bytes, err = os.ReadFile(configFilepath); err == nil {
 		if err = json.Unmarshal(bytes, &conf); err == nil {
-			if conf.Email == "" && conf.APIKey == "" && conf.Infisical != nil {
-				// read email and api key from infisical
-				var email, apiKey string
-				var kvs map[string]string
-				var exists bool
-
-				if conf.Infisical.E2EE && conf.Infisical.APIKey != nil {
-					kvs, err = helper.E2EEValues(
-						*conf.Infisical.APIKey,
-						conf.Infisical.WorkspaceID,
-						conf.Infisical.Token,
-						conf.Infisical.Environment,
-						conf.Infisical.SecretType,
-						[]string{conf.Infisical.EmailKeyPath, conf.Infisical.APIKeyKeyPath},
-					)
-				} else {
-					kvs, err = helper.Values(
-						conf.Infisical.WorkspaceID,
-						conf.Infisical.Token,
-						conf.Infisical.Environment,
-						conf.Infisical.SecretType,
-						[]string{conf.Infisical.EmailKeyPath, conf.Infisical.APIKeyKeyPath},
-					)
-				}
-
-				if email, exists = kvs[conf.Infisical.EmailKeyPath]; exists {
-					conf.Email = email
-				}
-				if apiKey, exists = kvs[conf.Infisical.APIKeyKeyPath]; exists {
-					conf.APIKey = apiKey
-				}
-			}
-
 			return conf, err
 		}
 	}
@@ -524,7 +533,9 @@ func run(application string, args []string) {
 	verbose := flagExists(args, "-v", "--verbose")
 
 	if conf, err := readConfig(); err == nil {
-		client := cfgo.NewCloudflareClient(conf.Email, conf.APIKey)
+		email, apiKey := conf.GetEmailAndAPIKey()
+
+		client := cfgo.NewCloudflareClient(email, apiKey)
 		client.Verbose = verbose
 
 		// handle commands
