@@ -524,6 +524,20 @@ func convertKeyValueParams(params []string) (result map[string]any) {
 	return result
 }
 
+// returns a new cloudflare client
+func getClient(verbose bool) (client *cfgo.CloudflareClient) {
+	if conf, err := readConfig(); err == nil {
+		email, apiKey := conf.GetEmailAndAPIKey()
+
+		client = cfgo.NewCloudflareClient(email, apiKey)
+		client.Verbose = verbose
+	} else {
+		_stderr.Fatalf("failed to read config: %s\n", err)
+	}
+
+	return client
+}
+
 // run with arguments
 func run(application string, args []string) {
 	// handle flags
@@ -532,69 +546,60 @@ func run(application string, args []string) {
 	}
 	verbose := flagExists(args, "-v", "--verbose")
 
-	if conf, err := readConfig(); err == nil {
-		email, apiKey := conf.GetEmailAndAPIKey()
-
-		client := cfgo.NewCloudflareClient(email, apiKey)
-		client.Verbose = verbose
-
-		// handle commands
-		argsWithoutFlags := filterParams(args)
-		if len(argsWithoutFlags) > 0 {
-			cmd := argsWithoutFlags[0]
-			params := argsWithoutFlags[1:]
-			switch cmd {
-			case cmdZones: // list zones
-				listZones(client)
-			case cmdRecords:
-				if len(params) >= 1 {
-					listDNSRecords(client, params[0])
-				} else {
-					showHelp(application, fmt.Errorf("zone identifier was not given"))
-				}
-			case cmdCreate:
-				if len(params) >= 3 {
-					kvs := convertKeyValueParams(params[2:])
-					if len(kvs) > 0 {
-						createDNSRecord(client, params[0], params[1], kvs)
-					} else {
-						showHelp(application, fmt.Errorf("parameters for a new DNS record were not given"))
-					}
-				} else {
-					showHelp(application, fmt.Errorf("essential parameters were not given"))
-				}
-			case cmdUpdate:
-				if len(params) >= 3 {
-					kvs := convertKeyValueParams(params[2:])
-					if len(kvs) > 0 {
-						updateDNSRecord(client, params[0], params[1], kvs)
-					} else {
-						showHelp(application, fmt.Errorf("parameters for an updated DNS record were not given"))
-					}
-				} else {
-					showHelp(application, fmt.Errorf("essential parameters were not given"))
-				}
-			case cmdBatch:
-				if len(params) >= 1 {
-					upsertDNSRecords(client, params[0])
-				} else {
-					showHelp(application, fmt.Errorf("JSON filepath was not given"))
-				}
-			case cmdDelete:
-				if len(params) >= 2 {
-					deleteDNSRecord(client, params[0], params[1])
-				} else {
-					showHelp(application, fmt.Errorf("zone identifier or DNS record identifier was not given"))
-				}
-			case cmdGenerate:
-				showSampleRecords()
+	// handle commands
+	argsWithoutFlags := filterParams(args)
+	if len(argsWithoutFlags) > 0 {
+		cmd := argsWithoutFlags[0]
+		params := argsWithoutFlags[1:]
+		switch cmd {
+		case cmdZones: // list zones
+			listZones(getClient(verbose))
+		case cmdRecords:
+			if len(params) >= 1 {
+				listDNSRecords(getClient(verbose), params[0])
+			} else {
+				showHelp(application, fmt.Errorf("zone identifier was not given"))
 			}
-
-			showHelp(application, fmt.Errorf("'%s' is not a supported command.", cmd))
-		} else {
-			showHelp(application, nil)
+		case cmdCreate:
+			if len(params) >= 3 {
+				kvs := convertKeyValueParams(params[2:])
+				if len(kvs) > 0 {
+					createDNSRecord(getClient(verbose), params[0], params[1], kvs)
+				} else {
+					showHelp(application, fmt.Errorf("parameters for a new DNS record were not given"))
+				}
+			} else {
+				showHelp(application, fmt.Errorf("essential parameters were not given"))
+			}
+		case cmdUpdate:
+			if len(params) >= 3 {
+				kvs := convertKeyValueParams(params[2:])
+				if len(kvs) > 0 {
+					updateDNSRecord(getClient(verbose), params[0], params[1], kvs)
+				} else {
+					showHelp(application, fmt.Errorf("parameters for an updated DNS record were not given"))
+				}
+			} else {
+				showHelp(application, fmt.Errorf("essential parameters were not given"))
+			}
+		case cmdBatch:
+			if len(params) >= 1 {
+				upsertDNSRecords(getClient(verbose), params[0])
+			} else {
+				showHelp(application, fmt.Errorf("JSON filepath was not given"))
+			}
+		case cmdDelete:
+			if len(params) >= 2 {
+				deleteDNSRecord(getClient(verbose), params[0], params[1])
+			} else {
+				showHelp(application, fmt.Errorf("zone identifier or DNS record identifier was not given"))
+			}
+		case cmdGenerate:
+			showSampleRecords()
 		}
+
+		showHelp(application, fmt.Errorf("'%s' is not a supported command.", cmd))
 	} else {
-		_stderr.Fatalf("failed to read config: %s\n", err)
+		showHelp(application, nil)
 	}
 }
