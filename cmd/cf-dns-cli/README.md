@@ -119,7 +119,7 @@ Generate a sample DNS records file in JSON format. (file used with 'batch' comma
 # with public IP address (like DDNS updater)
 #
 # created on: 2023.06.28.
-# updated on: 2023.07.07.
+# updated on: 2023.08.30.
 
 DNS_CLI_BIN="/path/to/cf-dns-cli"
 
@@ -127,13 +127,14 @@ ZONE_ID="0123456789abcdef9876543210fedcba" # your zone id here
 RECORD_ID="abcdef0123456789fedcba9876543210" # your record id here
 
 # NOTE: public IP address can be obtained from various services
-PUBLIC_IP=$(curl -s http://whatismyip.akamai.com)
+PUBLIC_IPV4=$(curl -s http://whatismyip.akamai.com)
+#PUBLIC_IPV6=$(curl -s http://ipv6.whatismyip.akamai.com)
 
 # ddns.example.com
 $DNS_CLI_BIN update $ZONE_ID $RECORD_ID \
     type=A \
     name=ddns.example.com \
-    content="$PUBLIC_IP" \
+    content="$PUBLIC_IPV4" \
     proxied=false
     comment="updated from '$(hostname)' with cf-dns-cli on $(date +%F)"
 
