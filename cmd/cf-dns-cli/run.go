@@ -14,6 +14,7 @@ import (
 	"github.com/meinside/infisical-go"
 	"github.com/meinside/infisical-go/helper"
 	"github.com/meinside/version-go"
+	"github.com/tailscale/hujson"
 )
 
 var _stdout = log.New(os.Stdout, "", 0)
@@ -100,14 +101,27 @@ func (c *config) GetEmailAndAPIKey() (email, apiKey string) {
 	return c.Email, c.APIKey
 }
 
+// standardize given JSON (JWCC) bytes
+func standardizeJSON(b []byte) ([]byte, error) {
+	ast, err := hujson.Parse(b)
+	if err != nil {
+		return b, err
+	}
+	ast.Standardize()
+
+	return ast.Pack(), nil
+}
+
 // read config file
 func readConfig() (conf config, err error) {
 	configFilepath := strings.Join([]string{getConfigDir(), configFilename}, string(filepath.Separator))
 
 	var bytes []byte
 	if bytes, err = os.ReadFile(configFilepath); err == nil {
-		if err = json.Unmarshal(bytes, &conf); err == nil {
-			return conf, err
+		if bytes, err = standardizeJSON(bytes); err == nil {
+			if err = json.Unmarshal(bytes, &conf); err == nil {
+				return conf, err
+			}
 		}
 	}
 
@@ -394,59 +408,63 @@ func upsertDNSRecords(client *cfgo.CloudflareClient, fpath string) {
 
 	var records []cfgo.DNSRecordRaw
 	if bytes, err := os.ReadFile(fpath); err == nil {
-		if err := json.Unmarshal(bytes, &records); err == nil {
-			for _, record := range records {
-				var err error
-				var zoneID, recordID string
-				if zoneID, err = record.StringFor("zone_id"); err != nil {
-					failed += 1
+		if bytes, err := standardizeJSON(bytes); err == nil {
+			if err := json.Unmarshal(bytes, &records); err == nil {
+				for _, record := range records {
+					var err error
+					var zoneID, recordID string
+					if zoneID, err = record.StringFor("zone_id"); err != nil {
+						failed += 1
 
-					_stderr.Printf("zone id not found in record: %s", err)
-				} else {
-					recordID, _ = record.StringFor("id") // record id can be null (when creating a new one)
-
-					// upsert
-					if recordID != "" {
-						// update
-						if _, err = client.UpdateDNSRecord(zoneID, recordID, record); err == nil {
-							processed += 1
-
-							if recordName, err := record.StringFor("name"); err == nil {
-								_stdout.Printf("updated [%s] record '%s'\n", record.GetType(), recordName)
-							}
-						} else {
-							failed += 1
-
-							if recordName, e := record.StringFor("name"); e == nil {
-								_stderr.Printf("failed to update [%s] record '%s': %s\n", record.GetType(), recordName, err)
-							}
-						}
+						_stderr.Printf("zone id not found in record: %s", err)
 					} else {
-						// create
-						if _, err = client.CreateDNSRecord(zoneID, record); err == nil {
-							processed += 1
+						recordID, _ = record.StringFor("id") // record id can be null (when creating a new one)
 
-							if recordName, err := record.StringFor("name"); err == nil {
-								_stdout.Printf("created [%s] record '%s'\n", record.GetType(), recordName)
+						// upsert
+						if recordID != "" {
+							// update
+							if _, err = client.UpdateDNSRecord(zoneID, recordID, record); err == nil {
+								processed += 1
+
+								if recordName, err := record.StringFor("name"); err == nil {
+									_stdout.Printf("updated [%s] record '%s'\n", record.GetType(), recordName)
+								}
+							} else {
+								failed += 1
+
+								if recordName, e := record.StringFor("name"); e == nil {
+									_stderr.Printf("failed to update [%s] record '%s': %s\n", record.GetType(), recordName, err)
+								}
 							}
 						} else {
-							failed += 1
+							// create
+							if _, err = client.CreateDNSRecord(zoneID, record); err == nil {
+								processed += 1
 
-							if recordName, e := record.StringFor("name"); e == nil {
-								_stderr.Printf("failed to create [%s] record '%s': %s\n", record.GetType(), recordName, err)
+								if recordName, err := record.StringFor("name"); err == nil {
+									_stdout.Printf("created [%s] record '%s'\n", record.GetType(), recordName)
+								}
+							} else {
+								failed += 1
+
+								if recordName, e := record.StringFor("name"); e == nil {
+									_stderr.Printf("failed to create [%s] record '%s': %s\n", record.GetType(), recordName, err)
+								}
 							}
 						}
 					}
 				}
-			}
 
-			_stderr.Printf("processed %d DNS records (%d errors)\n", processed, failed)
+				_stderr.Printf("processed %d DNS records (%d errors)\n", processed, failed)
 
-			if failed == 0 {
-				os.Exit(0)
+				if failed == 0 {
+					os.Exit(0)
+				}
+			} else {
+				_stderr.Printf("failed to parse JSON file: %s\n", err)
 			}
 		} else {
-			_stderr.Printf("failed to parse JSON file: %s\n", err)
+			_stderr.Printf("failed to standardize JSON file into JWCC: %s\n", err)
 		}
 	} else {
 		_stderr.Printf("failed to read file: %s\n", err)
