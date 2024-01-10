@@ -28,7 +28,3 @@ See more usages [here](https://github.com/meinside/cloudflare-go/tree/master/cmd
 - [ ] Other things that I need
 - [ ] All others
 
-## License
-
-MIT
-
