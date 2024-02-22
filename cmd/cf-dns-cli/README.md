@@ -26,34 +26,18 @@ You can also use [Infisical](https://infisical.com/) for retrieving your email a
 ```json
 {
   "infisical": {
+    "client_id": "012345-abcdefg-987654321",
+    "client_secret": "aAbBcCdDeEfFgG0123456789xyzwXYZW",
+
     "workspace_id": "012345abcdefg",
-    "token": "st.xyzwabcd.0987654321.abcdefghijklmnop",
     "environment": "dev",
     "secret_type": "shared",
+
     "email_key_path": "/path/to/your/KEY_TO_EMAIL",
     "api_key_key_path": "/path/to/your/KEY_TO_API_KEY"
   }
 }
 ```
-
-If your Infisical workspace's E2EE setting is enabled, you also need to provide your API key:
-
-```json
-{
-  "infisical": {
-    "e2ee": true,
-    "api_key": "ak.1234567890.abcdefghijk",
-
-    "workspace_id": "012345abcdefg",
-    "token": "st.xyzwabcd.0987654321.abcdefghijklmnop",
-    "environment": "dev",
-    "secret_type": "shared",
-    "email_key_path": "/path/to/your/KEY_TO_EMAIL",
-    "api_key_key_path": "/path/to/your/KEY_TO_API_KEY"
-  }
-}
-```
-
 
 ## usage
 

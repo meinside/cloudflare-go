@@ -45,12 +45,10 @@ type config struct {
 
 	// or Infisical settings
 	Infisical *struct {
-		// NOTE: When the workspace's E2EE setting is enabled, APIKey is essential for decryption
-		E2EE   bool    `json:"e2ee,omitempty"`
-		APIKey *string `json:"api_key,omitempty"`
+		ClientID     string `json:"client_id"`
+		ClientSecret string `json:"client_secret"`
 
 		WorkspaceID string               `json:"workspace_id"`
-		Token       string               `json:"token"`
 		Environment string               `json:"environment"`
 		SecretType  infisical.SecretType `json:"secret_type"`
 
@@ -67,24 +65,14 @@ func (c *config) GetEmailAndAPIKey() (email, apiKey string) {
 		var exists bool
 
 		var err error
-		if c.Infisical.E2EE && c.Infisical.APIKey != nil {
-			kvs, err = helper.E2EEValues(
-				*c.Infisical.APIKey,
-				c.Infisical.WorkspaceID,
-				c.Infisical.Token,
-				c.Infisical.Environment,
-				c.Infisical.SecretType,
-				[]string{c.Infisical.EmailKeyPath, c.Infisical.APIKeyKeyPath},
-			)
-		} else {
-			kvs, err = helper.Values(
-				c.Infisical.WorkspaceID,
-				c.Infisical.Token,
-				c.Infisical.Environment,
-				c.Infisical.SecretType,
-				[]string{c.Infisical.EmailKeyPath, c.Infisical.APIKeyKeyPath},
-			)
-		}
+		kvs, err = helper.Values(
+			c.Infisical.ClientID,
+			c.Infisical.ClientSecret,
+			c.Infisical.WorkspaceID,
+			c.Infisical.Environment,
+			c.Infisical.SecretType,
+			[]string{c.Infisical.EmailKeyPath, c.Infisical.APIKeyKeyPath},
+		)
 
 		if err != nil {
 			_stderr.Printf("failed to retrieve email and api key from infisical: %s", err)
