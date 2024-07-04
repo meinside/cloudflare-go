@@ -5,16 +5,21 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
-	cfgo "github.com/meinside/cloudflare-go"
-	"github.com/meinside/infisical-go"
-	"github.com/meinside/infisical-go/helper"
-	"github.com/meinside/version-go"
 	"github.com/tailscale/hujson"
+
+	// infisical
+	infisical "github.com/infisical/go-sdk"
+	"github.com/infisical/go-sdk/packages/models"
+
+	// my libraries
+	cfgo "github.com/meinside/cloudflare-go"
+	"github.com/meinside/version-go"
 )
 
 var _stdout = log.New(os.Stdout, "", 0)
@@ -40,17 +45,17 @@ const (
 // config struct for configuration
 type config struct {
 	// plain values
-	Email  string `json:"email,omitempty"`
-	APIKey string `json:"api_key,omitempty"`
+	Email  *string `json:"email,omitempty"`
+	APIKey *string `json:"api_key,omitempty"`
 
 	// or Infisical settings
 	Infisical *struct {
 		ClientID     string `json:"client_id"`
 		ClientSecret string `json:"client_secret"`
 
-		WorkspaceID string               `json:"workspace_id"`
-		Environment string               `json:"environment"`
-		SecretType  infisical.SecretType `json:"secret_type"`
+		ProjectID   string `json:"project_id"`
+		Environment string `json:"environment"`
+		SecretType  string `json:"secret_type"`
 
 		EmailKeyPath  string `json:"email_key_path"`
 		APIKeyKeyPath string `json:"api_key_key_path"`
@@ -58,35 +63,58 @@ type config struct {
 }
 
 // get email and api key, retrieve them from infisical if needed
-func (c *config) GetEmailAndAPIKey() (email, apiKey string) {
-	if c.Email == "" && c.APIKey == "" && c.Infisical != nil {
-		// read email and api key from infisical
-		var kvs map[string]string
-		var exists bool
+func (c *config) GetEmailAndAPIKey() (email, apiKey *string, err error) {
+	if c.Email == nil && c.APIKey == nil && c.Infisical != nil {
+		client := infisical.NewInfisicalClient(infisical.Config{
+			SiteUrl: "https://app.infisical.com",
+		})
 
-		var err error
-		kvs, err = helper.Values(
-			c.Infisical.ClientID,
-			c.Infisical.ClientSecret,
-			c.Infisical.WorkspaceID,
-			c.Infisical.Environment,
-			c.Infisical.SecretType,
-			[]string{c.Infisical.EmailKeyPath, c.Infisical.APIKeyKeyPath},
-		)
-
+		_, err = client.Auth().UniversalAuthLogin(c.Infisical.ClientID, c.Infisical.ClientSecret)
 		if err != nil {
-			_stderr.Printf("failed to retrieve email and api key from infisical: %s", err)
+			_stderr.Printf("* failed to authenticate with Infisical: %s", err)
+			return nil, nil, err
 		}
 
-		if email, exists = kvs[c.Infisical.EmailKeyPath]; exists {
-			c.Email = email
+		// read email and api key from infisical
+		var keyPath string
+		var secret models.Secret
+
+		// email
+		keyPath = c.Infisical.EmailKeyPath
+		secret, err = client.Secrets().Retrieve(infisical.RetrieveSecretOptions{
+			SecretKey:   path.Base(keyPath),
+			SecretPath:  path.Dir(keyPath),
+			ProjectID:   c.Infisical.ProjectID,
+			Type:        c.Infisical.SecretType,
+			Environment: c.Infisical.Environment,
+		})
+		if err == nil {
+			value := secret.SecretValue
+			c.Email = &value
+		} else {
+			_stderr.Printf("* failed to retrieve email from infisical: %s\n", err)
+			return nil, nil, err
 		}
-		if apiKey, exists = kvs[c.Infisical.APIKeyKeyPath]; exists {
-			c.APIKey = apiKey
+
+		// api key
+		keyPath = c.Infisical.APIKeyKeyPath
+		secret, err = client.Secrets().Retrieve(infisical.RetrieveSecretOptions{
+			SecretKey:   path.Base(keyPath),
+			SecretPath:  path.Dir(keyPath),
+			ProjectID:   c.Infisical.ProjectID,
+			Type:        c.Infisical.SecretType,
+			Environment: c.Infisical.Environment,
+		})
+		if err == nil {
+			value := secret.SecretValue
+			c.APIKey = &value
+		} else {
+			_stderr.Printf("* failed to retrieve api key from infisical: %s\n", err)
+			return nil, nil, err
 		}
 	}
 
-	return c.Email, c.APIKey
+	return c.Email, c.APIKey, nil
 }
 
 // standardize given JSON (JWCC) bytes
@@ -532,13 +560,23 @@ func convertKeyValueParams(params []string) (result map[string]any) {
 
 // returns a new cloudflare client
 func getClient(verbose bool) (client *cfgo.CloudflareClient) {
-	if conf, err := readConfig(); err == nil {
-		email, apiKey := conf.GetEmailAndAPIKey()
+	var err error
 
-		client = cfgo.NewCloudflareClient(email, apiKey)
-		client.Verbose = verbose
-	} else {
-		_stderr.Fatalf("failed to read config: %s\n", err)
+	var conf config
+	if conf, err = readConfig(); err == nil {
+		var email, apiKey *string
+		if email, apiKey, err = conf.GetEmailAndAPIKey(); err == nil {
+			if email != nil && apiKey != nil {
+				client = cfgo.NewCloudflareClient(*email, *apiKey)
+				client.Verbose = verbose
+			} else {
+				err = fmt.Errorf("`email` or `api_key` is missing")
+			}
+		}
+	}
+
+	if err != nil {
+		_stderr.Fatalf("cloudflare client failed to read config: %s\n", err)
 	}
 
 	return client
