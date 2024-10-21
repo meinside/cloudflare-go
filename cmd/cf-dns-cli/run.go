@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -65,7 +66,7 @@ type config struct {
 // get email and api key, retrieve them from infisical if needed
 func (c *config) GetEmailAndAPIKey() (email, apiKey *string, err error) {
 	if c.Email == nil && c.APIKey == nil && c.Infisical != nil {
-		client := infisical.NewInfisicalClient(infisical.Config{
+		client := infisical.NewInfisicalClient(context.TODO(), infisical.Config{
 			SiteUrl: "https://app.infisical.com",
 		})
 
