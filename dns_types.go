@@ -122,7 +122,7 @@ func valueFor[T any](r DNSRecordRaw, key string) (value T, err error) {
 		if value, ok = v.(T); ok {
 			return value, nil
 		} else {
-			return value, fmt.Errorf("value for key: '%s' could not be converted to %T", value)
+			return value, fmt.Errorf("value for key: '%s' could not be converted to %T", key, value)
 		}
 	} else {
 		return value, fmt.Errorf("no such value for key: '%s'", key)
