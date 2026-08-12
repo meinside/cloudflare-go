@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -12,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/fatih/color"
+	"github.com/jwalton/go-supportscolor"
 	"github.com/tailscale/hujson"
 
 	// infisical
@@ -23,8 +26,10 @@ import (
 	"github.com/meinside/version-go"
 )
 
-var _stdout = log.New(os.Stdout, "", 0)
-var _stderr = log.New(os.Stderr, "", 0)
+var (
+	_stdout = log.New(os.Stdout, "", 0)
+	_stderr = log.New(os.Stderr, "", 0)
+)
 
 const (
 	applicationName = "cf-dns-cli"
@@ -206,8 +211,9 @@ List all zones for this account.
 
   $ %[1]s %[3]s
 
-List all DNS records for given zone identifier.
+List all DNS records or records for given zone identifier.
 
+  $ %[1]s %[4]s
   $ %[1]s %[4]s [ZONE_ID]
 
 Create a DNS record with given parameters.
@@ -335,10 +341,28 @@ func showSampleRecords() {
 }
 
 // list all zones
-func listZones(client *cfgo.CloudflareClient) {
-	if zones, err := client.ListZones(); err == nil {
-		for _, zone := range zones.Result {
-			_stdout.Printf("%s %s\n", zone.ID, zone.Name)
+func listZones(client *cfgo.CloudflareClient) (zones []cfgo.Zone, err error) {
+	var res cfgo.ResponseZones
+	if res, err = client.ListZones(); err == nil {
+		return res.Result, nil
+	}
+	return nil, err
+}
+
+// list all zones and print them
+func listZonesAndPrint(client *cfgo.CloudflareClient) {
+	stdoutColorSupported := supportscolor.Stdout().SupportsColor
+
+	if zones, err := listZones(client); err == nil {
+		for _, zone := range zones {
+			id := zone.ID
+			name := zone.Name
+			if stdoutColorSupported {
+				id = color.New(color.FgHiBlue).SprintFunc()(id)
+				name = color.New(color.FgHiWhite).SprintFunc()(name)
+			}
+
+			_stdout.Printf("%s %s\n", id, name)
 		}
 
 		os.Exit(0)
@@ -349,33 +373,75 @@ func listZones(client *cfgo.CloudflareClient) {
 	}
 }
 
-// list all DNS records for given zone identifier
-func listDNSRecords(client *cfgo.CloudflareClient, zoneID string) {
-	if records, err := client.ListDNSRecords(zoneID, nil); err == nil {
-		for _, record := range records.Result {
-			if name, err := record.StringFor("name"); err == nil {
-				if id, err := record.StringFor("id"); err == nil {
-					if typ3, err := record.StringFor("type"); err == nil {
-						lines := []string{name}
-						if content, err := record.StringFor("content"); err == nil {
-							lines = append(lines, content)
-						}
-						if comment, err := record.StringFor("comment"); err == nil {
-							lines = append(lines, comment)
-						}
+// list all DNS records for given zone identifier, or all DNS records if zone identifier is not given
+func listDNSRecordsAndPrint(client *cfgo.CloudflareClient, zoneID string) {
+	var zoneIDs []string = nil
+	if zoneID == "" {
+		if zones, err := listZones(client); err == nil {
+			for _, zone := range zones {
+				zoneIDs = append(zoneIDs, zone.ID)
+			}
+		} else {
+			_stderr.Printf("failed to list zones for DNS records: %s", err)
 
-						_stdout.Printf("%s [%s] %s", id, typ3, strings.Join(lines, " | "))
-					}
-				}
+			os.Exit(1)
+		}
+	} else {
+		zoneIDs = []string{zoneID}
+	}
+
+	stdoutColorSupported := supportscolor.Stdout().SupportsColor
+
+	for _, zoneID := range zoneIDs {
+		if len(zoneIDs) > 1 {
+			formatted := fmt.Sprintf("> zone: %s\n", zoneID)
+			if stdoutColorSupported { // if color is supported,
+				_, _ = color.New(color.FgBlue).Fprint(os.Stdout, formatted)
+			} else {
+				_stdout.Print(formatted)
 			}
 		}
 
-		os.Exit(0)
-	} else {
-		_stderr.Printf("failed to list DNS records for zone %s: %s", zoneID, err)
+		if records, err := client.ListDNSRecords(zoneID, nil); err == nil {
+			for _, record := range records.Result {
+				if name, err := record.StringFor("name"); err == nil {
+					if id, err := record.StringFor("id"); err == nil {
+						if typ3, err := record.StringFor("type"); err == nil {
+							if stdoutColorSupported {
+								id = color.New(color.FgHiRed).SprintFunc()(id)
+								typ3 = color.New(color.FgHiBlue).SprintFunc()(typ3)
+							}
 
-		os.Exit(1)
+							_stdout.Printf("%s [%s] %s", id, typ3, name)
+
+							if content, err := record.StringFor("content"); err == nil {
+								content = strings.TrimSpace(content)
+								if stdoutColorSupported {
+									content = color.New(color.FgHiGreen).SprintFunc()(content)
+								}
+
+								_stdout.Printf("  %s", content)
+							}
+							if comment, err := record.StringFor("comment"); err == nil {
+								comment = strings.TrimSpace(comment)
+								if stdoutColorSupported {
+									comment = color.RGB(128, 128, 128).SprintFunc()(comment)
+								}
+
+								_stdout.Printf("  %s", comment)
+							}
+						}
+					}
+				}
+			}
+		} else {
+			_stderr.Printf("failed to list DNS records for zone %s: %s", zoneID, err)
+
+			os.Exit(1)
+		}
 	}
+
+	os.Exit(0)
 }
 
 // create a DNS record with given parameters
@@ -383,9 +449,7 @@ func createDNSRecord(client *cfgo.CloudflareClient, zoneID, typ3 string, params 
 	record := map[string]any{
 		"type": typ3,
 	}
-	for k, v := range params {
-		record[k] = v
-	}
+	maps.Copy(record, params)
 
 	// create
 	if _, err := client.CreateDNSRecord(zoneID, record); err == nil {
@@ -402,9 +466,7 @@ func updateDNSRecord(client *cfgo.CloudflareClient, zoneID, recordID string, par
 	record := map[string]any{
 		"id": recordID,
 	}
-	for k, v := range params {
-		record[k] = v
-	}
+	maps.Copy(record, params)
 
 	// update
 	if updated, err := client.UpdateDNSRecord(zoneID, recordID, record); err == nil {
@@ -598,13 +660,13 @@ func run(application string, args []string) {
 		params := argsWithoutFlags[1:]
 		switch cmd {
 		case cmdZones: // list zones
-			listZones(getClient(verbose))
+			listZonesAndPrint(getClient(verbose))
 		case cmdRecords:
-			if len(params) >= 1 {
-				listDNSRecords(getClient(verbose), params[0])
-			} else {
-				showHelp(application, fmt.Errorf("zone identifier was not given"))
+			var zoneID string
+			if len(params) > 0 {
+				zoneID = params[0]
 			}
+			listDNSRecordsAndPrint(getClient(verbose), zoneID)
 		case cmdCreate:
 			if len(params) >= 3 {
 				kvs := convertKeyValueParams(params[2:])
@@ -643,7 +705,7 @@ func run(application string, args []string) {
 			showSampleRecords()
 		}
 
-		showHelp(application, fmt.Errorf("'%s' is not a supported command.", cmd))
+		showHelp(application, fmt.Errorf("'%s' is not a supported command", cmd))
 	} else {
 		showHelp(application, nil)
 	}

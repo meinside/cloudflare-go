@@ -3,7 +3,9 @@ module github.com/meinside/cloudflare-go
 go 1.26
 
 require (
+	github.com/fatih/color v1.19.0
 	github.com/infisical/go-sdk v0.8.0
+	github.com/jwalton/go-supportscolor v1.2.0
 	github.com/meinside/version-go v0.0.3
 	github.com/tailscale/hujson v0.0.0-20260727124030-b80ff77dac4f
 )
@@ -54,6 +56,7 @@ require (
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/api v0.293.0 // indirect
